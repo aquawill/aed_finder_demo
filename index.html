@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script>
+        L_PREFER_CANVAS = false;
+        L_NO_TOUCH = false;
+        L_DISABLE_3D = false;
+
+    </script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.3/dist/leaflet.css" integrity="sha512-Rksm5RenBEKSKFjgI3a41vrjkw4EVPlJ3+OiI65vTjIdo9brlAacEuKOiQ5OFh7cOI1bkDwLqdLw3Zg0cRJAAQ==" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.3.3/dist/leaflet.js" integrity="sha512-tAGcCfR4Sc5ZP5ZoVz0quoZDYX5aCtEm/eu1KhSLj2c9eFrylXZknQYmxUssFaVJKvvc0dJQixhGjG2yXWiV9Q==" crossorigin="">
+
+
+    </script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js">
+
+
+    </script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js">
+
+
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js">
+
+
+    </script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css" />
+    <link rel="stylesheet" href="https://rawgit.com/python-visualization/folium/master/folium/templates/leaflet.awesome.rotate.css" />
+    </script>
+    <script src="./leaflet.bouncemarker/bouncemarker.js">
+
+
+    </script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-easybutton@2/src/easy-button.css">
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-easybutton@2/src/easy-button.js">
+
+
+    </script>
+    <script src='https://api.tiles.mapbox.com/mapbox.js/plugins/leaflet-omnivore/v0.3.1/leaflet-omnivore.min.js'>
+
+
+    </script>
+    <script src='./leaflet-ant-path/dist/leaflet-ant-path.js'>
+
+
+    </script>
+    <!-- Include the loading control -->
+    <link rel="stylesheet" href="./src/Control.Loading.css" />
+    <script src="./src/Control.Loading.js">
+
+
+    </script>
+    <script src="./src/leaflet_hash.js">
+
+
+    </script>
+    <style>
+        html,
+        body {
+            padding: 0;
+            margin: 0;
+        }
+
+        html,
+        body,
+        #map {
+            height: 100%;
+            width: 100vw;
+        }
+
+    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+</head>
+
+<body>
+
+    <div class="folium-map" id="map"></div>
+
+</body>
+<script>
+    var bounds = null;
+
+    var he_appid = 'KymxRBvsVraBqbxy6gCt';
+    var he_appcode = 'LbNbmVAeiyg51Dbr2C_NOw';
+
+    var map = L.map('map', {
+            keyboard: true,
+            tap: true,
+            attributionControl: false,
+            crs: L.CRS.EPSG3857,
+            minZoom: 15,
+            zoomControl: false,
+        }).fitWorld().setView([25.02634, 121.53477], 17),
+        marker;
+
+    map.locate({
+        setView: true,
+        watch: true,
+        enableHighAccuracy: true,
+        timeout: 500,
+        maximumAge: 0,
+        animate: true
+    });
+
+    var aed_point_group = L.featureGroup().addTo(map);
+    var aed_connection_group = L.featureGroup().addTo(map);
+    var selected_aed;
+    var path_to_selected_aed;
+
+    var hash = new L.Hash(map);
+    var here_maptile = L.tileLayer(
+        'https://{s}.base.maps.api.here.com/maptile/2.1/maptile/newest/normal.day/{z}/{x}/{y}/256/png8?lg=cht&ppi=320&pois&app_id=' + he_appid + '&app_code=' + he_appcode, {
+            "attribution": '(c) 2018 HERE',
+            "detectRetina": true,
+            "maxZoom": 20,
+            "minZoom": 1,
+            "noWrap": false,
+            "subdomains": ["1", "2", "3"]
+        }).addTo(map);
+
+    var xmlHttp;
+
+    function httpGet(theUrl) {
+        xmlHttp = new XMLHttpRequest();
+        xmlHttp.open("GET", theUrl, false); // false for synchronous request
+        xmlHttp.send(null);
+        return xmlHttp.responseText;
+    };
+
+    function getURL(URL) {
+        return new Promise(function(resolve, reject) {
+            var req = new XMLHttpRequest();
+            req.open('GET', URL, true);
+            req.onload = function() {
+                if (req.status === 200) {
+                    resolve(req.responseText);
+                } else {
+                    reject(new Error(req.statusText));
+                }
+            };
+            req.onerror = function() {
+                reject(new Error(req.statusText));
+            };
+            req.send();
+        });
+    }
+
+
+    function aed_locator(lat, lon, popup_text, availability) {
+        var green_aed = L.AwesomeMarkers.icon({
+            markerColor: 'green',
+            prefix: 'fa',
+            icon: 'fa-heartbeat'
+        });
+        var red_aed = L.AwesomeMarkers.icon({
+            markerColor: 'red',
+            prefix: 'fa',
+            icon: 'fa-heartbeat'
+        });
+        var black_aed = L.AwesomeMarkers.icon({
+            markerColor: 'black',
+            prefix: 'fa',
+            icon: 'fa-heartbeat'
+        });
+        if (availability) {
+            new L.Marker([lat, lon], {
+                icon: green_aed
+            }).bindPopup(popup_text).addTo(aed_point_group);
+        } else {
+            new L.Marker([lat, lon], {
+                icon: black_aed
+            }).bindPopup(popup_text).addTo(aed_point_group);
+        }
+    }
+
+    function aed_availability_checker(start_time, end_time) {
+        var current_date = new Date();
+        var current_week_day = current_date.getDay();
+        var current_hour = current_date.getHours();
+        var current_tz = Math.abs(current_date.getTimezoneOffset() / 60);
+        var current_minute = current_date.getMinutes();
+        var start_h = parseInt(start_time.split(':')[0]);
+        var start_m = parseInt(start_time.split(':')[1]);
+        var end_h = parseInt(end_time.split(':')[0]);
+        var end_m = parseInt(end_time.split(':')[1]);
+        var start_by_min = 0;
+        var end_by_min = 0;
+        if (end_m == 0) {
+            end_m = 60;
+        }
+        if (end_h == 0) {
+            end_h = 24;
+        }
+        if (end_h < 24) {
+            end_by_min += end_h * 60;
+            if (end_m < 60) {
+                end_by_min += end_m;
+            }
+        } else if (end_h == 24) {
+            if (end_m == 60) {
+                end_by_min += end_h * 60;
+            }
+        }
+        start_by_min += (start_h * 60 + start_m);
+        if (end_by_min < start_by_min) {
+            end_by_min += 1440;
+        }
+        var current_time_by_min = current_hour * 60 + current_minute;
+        console.log(current_time_by_min, start_by_min, end_by_min)
+        if (current_time_by_min >= start_by_min && end_by_min >= current_time_by_min) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    function select_aed(latlng, popup_text) {
+        var popup_text = "距離：" + map.getCenter().distanceTo(latlng) + "公尺<br>" + popup_text;
+        selected_aed = L.marker(latlng).bindPopup(popup_text).addTo(map);
+        new L.Polyline.AntPath([map.getCenter(), latlng]).addTo(map);
+    }
+
+    function refresh_aed_data() {
+        var current_date = new Date();
+        var current_week_day = current_date.getDay();
+        var map_bounds = map.getBounds();
+        var map_nw_corner = map_bounds.getNorthWest();
+        var map_se_corner = map_bounds.getSouthEast();
+        var aed_cle_url = 'https://cle.cit.api.here.com/2/search/bbox.json?app_id=' + he_appid + '&app_code=' + he_appcode + '&layer_id=AED_180817&bbox=' + map_nw_corner.lat + ',' + map_nw_corner.lng + ';' + map_se_corner.lat + ',' + map_se_corner.lng;
+        var map_center_address = geocode_and_find_aed(map.getCenter());
+        getURL(aed_cle_url).then(function onFulfilled(value) {
+            aed_point_group.clearLayers();
+            var r = JSON.parse(value);
+            var geometries = r["geometries"];
+            for (i = 0; i < geometries.length; i++) {
+                var attr = geometries[i]["attributes"];
+                var AED_POSITION_DESC = attr['AED_POSITION_DESC'];
+                var START_SAT = attr['START_SAT'];
+                var LOCATION_LAT = parseFloat(attr['LOCATION_LAT']);
+                var LOCATION_ADD = attr['LOCATION_ADD'];
+                var END_SAT = attr['END_SAT']
+                var START_MON_TO_FRI = attr['START_MON_TO_FRI'];
+                var AED_LON = parseFloat(attr['AED_LON']);
+                var LOCATION_DIST = attr['LOCATION_DIST'];
+                var LOCATION_LON = parseFloat(attr['LOCATION_LON']);
+                var OPEN_TIME_TEL = attr['OPEN_TIME_TEL'];
+                var LOCATION_CAT_2 = attr['LOCATION_CAT_2'];
+                var LOCATION_CAT_1 = attr['LOCATION_CAT_1'];
+                var LOCATION_CAT_3 = attr['LOCATION_CAT_3'];
+                var LOCATION_COUNTY = attr['LOCATION_COUNTY'];
+                var OPEN_EVERYDAY = attr['OPEN_EVERYDAY'];
+                var GEOMETRY_ID = attr['GEOMETRY_ID'];
+                var START_SUN = attr['START_SUN'];
+                var END_MON_TO_FRI = attr['END_MON_TO_FRI'];
+                var AED_POSITION = attr['AED_POSITION'];
+                var LOCATION_DESC = attr['LOCATION_DESC'];
+                var OPEN_TIME_DESC = attr['OPEN_TIME_DESC'];
+                var END_SUN = attr['END_SUN'];
+                var LOCATION_NAME = attr['LOCATION_NAME'];
+                var AED_LAT = parseFloat(attr['AED_LAT']);
+                var green_aed = L.AwesomeMarkers.icon({
+                    markerColor: 'green',
+                    prefix: 'fa',
+                    icon: 'fa-heartbeat'
+                });
+                var green_aed = L.AwesomeMarkers.icon({
+                    markerColor: 'green',
+                    prefix: 'fa',
+                    icon: 'fa-heartbeat'
+                });
+                var red_aed = L.AwesomeMarkers.icon({
+                    markerColor: 'red',
+                    prefix: 'fa',
+                    icon: 'fa-heartbeat'
+                });
+                var black_aed = L.AwesomeMarkers.icon({
+                    markerColor: 'black',
+                    prefix: 'fa',
+                    icon: 'fa-heartbeat'
+                });
+                var description_text = "距離：" + parseInt(map.getCenter().distanceTo(L.latLng([AED_LAT, AED_LON]))) + "公尺<br>AED所在地：" + LOCATION_NAME + "<br>地址：" + LOCATION_ADD + "<br>AED設置地點：" + AED_POSITION_DESC + "<br>開放時間：<br>* 週一到週五：" + START_MON_TO_FRI + " - " + END_MON_TO_FRI + "<br>* 週六：" + START_SAT + " - " + END_SAT + "<br>* 週日：" + START_SUN + " - " + END_SUN;
+                console.log(LOCATION_NAME)
+                if (OPEN_TIME_DESC.length > 0) {
+                    description_text += ("<br>* 開放時間說明：" + OPEN_TIME_DESC);
+                }
+                if (current_week_day > 0 && 6 > current_week_day) {
+                    var availability = aed_availability_checker(START_MON_TO_FRI, END_MON_TO_FRI);
+                    var icon;
+                    if (availability) {
+                        icon = green_aed;
+                    } else {
+                        icon = black_aed;
+                        description_text = "***現在可能非開放時間***<br>" + description_text;
+                    }
+                    new L.Marker([AED_LAT, AED_LON], {
+                        icon: icon
+                    }).bindPopup(description_text).addTo(aed_point_group);
+                } else if (current_week_day == 6) {
+                    var availability = aed_availability_checker(START_SAT, END_SAT);
+                    var icon;
+                    if (availability) {
+                        icon = green_aed;
+                    } else {
+                        icon = black_aed;
+                        description_text = "***現在可能非開放時間***<br>" + description_text;
+                    }
+                    new L.Marker([AED_LAT, AED_LON], {
+                        icon: icon
+                    }).bindPopup(description_text).addTo(aed_point_group);
+                } else if (current_week_day == 0) {
+                    var availability = aed_availability_checker(START_SUN, END_SUN);
+                    var icon;
+                    if (availability) {
+                        icon = green_aed;
+                    } else {
+                        icon = black_aed;
+                        description_text = "***現在可能非開放時間***<br>" + description_text;
+                    }
+                    new L.Marker([AED_LAT, AED_LON], {
+                        icon: icon
+                    }).bindPopup(description_text).addTo(aed_point_group);
+                } else {
+                    console.log('error');
+                }
+            }
+        }).catch(function onRejected(error) {
+            return null;
+        });
+    }
+    map.on('load', refresh_aed_data);
+    map.on('moveend', refresh_aed_data);
+    map.on('zoomend', refresh_aed_data);
+
+    function here_geocoder_api_parser(value) {
+        r = JSON.parse(value);
+        if (r["Response"]["View"].length > 0) {
+            var result_display_location_lat = r["Response"]["View"]["0"]["Result"][0]["Location"]["DisplayPosition"]["Latitude"];
+            var result_display_location_lon = r["Response"]["View"]["0"]["Result"][0]["Location"]["DisplayPosition"]["Longitude"];
+            var result_display_location_latlon = L.latLng([result_display_location_lat, result_display_location_lon]);
+            var result_navigaion_location_lat = r["Response"]["View"]["0"]['Result'][0]['Location']['NavigationPosition'][0]['Latitude'];
+            var result_navigaion_location_lon = r["Response"]["View"]["0"]['Result'][0]['Location']['NavigationPosition'][0]['Longitude'];
+            var result_navigaion_location_latlon = L.latLng([result_navigaion_location_lat, result_navigaion_location_lon]);
+            var result_address_label = r["Response"]["View"]["0"]["Result"][0]["Location"]["Address"]["Label"];
+            return [result_navigaion_location_latlon, result_address_label]
+        } else {
+            map.openPopup("Please input a valid address!", map.getCenter(), {
+                keepInView: true,
+            })
+        }
+    }
+
+    function geocode_and_find_aed(geocode_loc) {
+        aed_connection_group.clearLayers();
+        var here_rev_geocode_url = 'https://reverse.geocoder.api.here.com/6.2/reversegeocode.json?prox=' + geocode_loc.lat + ',' + geocode_loc.lng + ',250&mode=retrieveAddresses&maxresults=3&gen=9&app_id=' + he_appid + ' &app_code=' + he_appcode;
+        getURL(here_rev_geocode_url).then(function onFulfilled(value) {
+            var result = here_geocoder_api_parser(value);
+            console.log(result);
+            var result_latlon = result[0]
+            var result_name = result[1]
+            var gfe_url = 'https://cle.cit.api.here.com/2/search/proximity.json?layer_ids=AED_180817&proximity=' + geocode_loc.lat + ',' + geocode_loc.lng + ',500&app_id=' + he_appid + '&app_code=' + he_appcode;
+            console.log(gfe_url)
+            getURL(gfe_url).then(function onFulfilled(value) {
+                var r = JSON.parse(value);
+                var geometries = (r["geometries"]);
+                var aed_candidate;
+                if (geometries.length < 3) {
+                    aed_candidate = geometries.length;
+                } else {
+                    aed_candidate = 3;
+                }
+                for (i = 0; i < aed_candidate; i++) {
+                    var geometry = geometries[i];
+                    var aed_lat = geometries[i]["nearestLat"];
+                    var aed_lon = geometries[i]["nearestLon"];
+                    var polyline = L.polyline([
+                        [geocode_loc.lat, geocode_loc.lng],
+                        [aed_lat, aed_lon]
+                    ]).addTo(aed_connection_group).bindTooltip("距離：" + parseInt(L.latLng([geocode_loc.lat, geocode_loc.lng]).distanceTo(L.latLng([aed_lat, aed_lon]))) + "公尺");
+                }
+            }).catch(function onRejected(error) {
+                console.error(error);
+            });
+            //var gfe_station_list = [];
+            var home_icon = L.AwesomeMarkers.icon({
+                markerColor: 'red',
+                icon: 'home'
+            });
+            var popup_text = "所在地：" + result_name;
+            if (marker) {
+                marker.setLatLng([geocode_loc.lat, geocode_loc.lng], {
+                    icon: home_icon
+                }).setPopupContent(popup_text).openPopup();
+            } else {
+                marker = L.marker([geocode_loc.lat, geocode_loc.lng], {
+                    icon: home_icon
+                }).bindPopup(popup_text, {}).addTo(map).openPopup();
+            }
+        }).catch(function onRejected(error) {
+            console.error(error);
+        });
+    }
+
+    //Create control
+    geocode_box = L.control({
+        position: 'topleft'
+    });
+    geocode_box.onAdd = function(map) {
+        this._div = L.DomUtil.create('div', 'geocode_box');
+        this._div.innerHTML = '<input type="text" style="font-size:16px" placeholder="Search Address..." maxlength="50" size="30"/>';
+        //this._div.innerHTML += '<button onclick="here_geocoder()" type="button">Submit</button>';
+        return this._div;
+    }
+    geocode_box.addTo(map);
+
+    //Functions to either disable (onmouseover) or enable (onmouseout) the map's dragging
+    function controlEnter(e) {
+        map.dragging.disable();
+        map.touchZoom.disable();
+        map.doubleClickZoom.disable();
+        map.scrollWheelZoom.disable();
+    }
+
+    function controlLeave() {
+        map.dragging.enable();
+        map.touchZoom.enable();
+        map.doubleClickZoom.enable();
+        map.scrollWheelZoom.enable();
+    }
+
+    //Quick application to all input tags
+    ///*
+    var inputTags = document.getElementsByTagName("input")
+    for (var i = 0; i < inputTags.length; i++) {
+        inputTags[i].onmouseover = controlEnter;
+        inputTags[i].onmouseout = controlLeave;
+        inputTags[i].touchstart = document.getElementsByTagName("input")[0].focus();
+        inputTags[i].touchend = controlLeave;
+    }
+    document.getElementsByTagName("input")[0].onkeypress = function(e) {
+        if (e.keyCode == 13) {
+            here_geocoder();
+        }
+    }
+
+    /*
+    	function show_result(input_latlon, input_name) {
+
+            var nearest_aed_result = nearest_aed_checker(input_latlon);
+            if (nearest_aed_result) {
+                var closest_aed = nearest_aed_result[0];
+                var route_text = nearest_aed_result[1];
+                if (input_latlon) {
+                    var popup_text = "所在地：" + input_name + "<br/>距離最近的AED：" + closest_station[1] + "<br/>" + route_text + "<br/><a href=\"https://wego.here.com/location/?map=" + closest_station[3] + ",15,&msg=" + closest_station[1] + "\" target=\"_blank\">使用HERE導航至目的地</a>";
+                    if (marker) {
+                        marker.setLatLng(input_latlon, {
+                            icon: home
+                        }).setPopupContent(popup_text).openPopup();
+                    } else {
+                        marker = L.marker(input_latlon, {
+                            icon: home
+                        }).bindPopup(popup_text, {}).addTo(map).openPopup();
+                    }
+                }
+            } else {
+                if (input_latlon) {
+                    if (marker) {
+                        marker.setLatLng(input_latlon, {
+                            icon: home
+                        }).setPopupContent("所在地：" + input_name + "<br/>此地點附近沒有AED！").openPopup();
+                    } else {
+                        marker = L.marker(input_latlon, {
+                            icon: home
+                        }).bindPopup("所在地：" + input_name + "<br/>此地點附近沒有AED！").addTo(map).openPopup();
+                    }
+                }
+            }
+        }
+    */
+
+
+    function here_geocoder() {
+        var user_input_string = document.getElementsByTagName("input")[0]["value"];
+        var geocode_url = 'https://geocoder.api.here.com/6.2/geocode.json?searchtext=' + user_input_string + '&app_id=' + he_appid + '&app_code=' + he_appcode;
+        getURL(geocode_url).then(function onFulfilled(value) {
+            var result_latlon = here_geocoder_api_parser(value)[0]
+            var result_name = here_geocoder_api_parser(value)[1]
+            show_result(result_latlon, result_name);
+        }).catch(function onRejected(error) {
+            console.error(error);
+        });
+    }
+
+
+    map.on('contextmenu', function(e) {
+        geocode_and_find_aed(e.latlng);
+    });
+
+
+    /*
+    map.on('contextmenu', function(e) {
+        geocode_and_find_aed(e.latlng);
+    });
+    */
+    /*
+    map.on('mousedown', function onMouseDown(e) {
+	pressTimer = window.setTimeout(function() {
+	        geocode_and_find_aed(e.latlng);
+		},3000)
+	});
+	*/
+    var loc;
+    /*
+    function loc_updater(lat, lon, radius, heading, speed) {
+        map.panTo([lat, lon]);
+        var epoch = new Date().getTime();
+        var trace_point = new L.circleMarker([lat, lon], {
+            radius: 6,
+            color: '#cca4d6',
+            interactive: false,
+            opacity: 0.3
+        }).addTo(map);
+        trace.addLatLng([lat, lon]);
+        circle.setLatLng([lat, lon]);
+        circle.setRadius(radius);
+    };
+    var animatedToggle = L.easyButton({
+        id: 'animated-marker-toggle',
+        position: 'topleft',
+        //type: 'animate',
+        states: [{
+            stateName: 'a',
+            icon: 'fa-location-arrow',
+            title: 'Start tracking position.',
+            onClick: function(control) {
+                control.state('b');
+                map.dragging.disable();
+                map.touchZoom.disable();
+                map.scrollWheelZoom.disable();
+                map.boxZoom.disable();
+                map.doubleClickZoom.disable();
+                //log_saver.enable();
+                //console.log('Position tracking started!')
+                map.locate({
+                    setView: true,
+                    watch: true,
+                    enableHighAccuracy: true,
+                    timeout: 1000,
+                    maximumAge: 0,
+                    animate: true
+                });
+                loc = navigator.geolocation.watchPosition(function(position) {
+                    loc_updater(position.coords.latitude, position.coords.longitude, position.coords.accuracy / 2, position.coords.heading, position.coords.speed);
+                });
+            }
+        }, {
+            stateName: 'b',
+            title: 'Stop tracking position.',
+            icon: 'fa-lock',
+            onClick: function(control) {
+                map.stopLocate();
+                map.dragging.enable();
+                map.touchZoom.enable();
+                map.scrollWheelZoom.enable();
+                map.boxZoom.enable();
+                map.doubleClickZoom.enable();
+                control.state('a');
+                //console.log('Position tracking ended!');
+                navigator.geolocation.clearWatch(loc);
+            }
+        }]
+    });
+    animatedToggle.addTo(map);
+    */
+
+
+
+    var layer_con = {
+        base_layers: {
+            "HERE Base Map": here_maptile,
+        },
+        overlays: {
+            "AED Map": aed_point_group,
+        }
+    };
+    L.control.layers(
+        layer_con.base_layers,
+        layer_con.overlays, {
+            position: 'topright',
+            collapsed: true,
+            autoZIndex: true,
+            //hideSingleBase: true
+        }
+    ).addTo(map);
+
+    L.control.scale({
+        position: 'bottomleft',
+    }).addTo(map);
+
+    L.control.zoom({
+        position: 'bottomright',
+    }).addTo(map);
+
+</script>
